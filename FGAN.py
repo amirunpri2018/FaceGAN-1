@@ -1,21 +1,29 @@
 import tensorflow as tf
 import numpy as np
-from skimage.io import imsave
+from util import helper
+from glob import glob
 import os
-from datetime import datetime
-from util import  file_reader
-import tensorflow.contrib.slim as slim
+import datetime as datetime
 
 class FGAN():
     def __init__(self):
-        self.img_height = 28
-        self.img_width = 28
-        self.img_size = self.img_height * self.img_width
-        self.epochs = 500
-        self.batch_size = 100
-        self.z_dim = 128
+        self.image_height = 64
+        self.image_width = 64
+        self.image_channels=3
+        self.img_size = self.image_height * self.image_width*self.image_channels
+        self.epochs = 20
+        self.batch_size = 40
+        self.z_dim = 100
         self.learning_rate = 0.0003
         self.beta1 = 0.5
+        self.inputs_real = tf.placeholder(tf.float32, shape=(None, self.image_width, self.image_height, self.image_channels),
+                                     name='input_real')
+        tf.summary.image('real',self.inputs_real,20)
+        self.inputs_z = tf.placeholder(tf.float32, (None, self.z_dim), name='inputs_z')
+
+        self.learning_rate = tf.placeholder(tf.float32, name='learning_rate')
+        self.d_loss, self.g_loss = self._build_loss()
+
 
     def _build_generator(self,z, out_channel_dim, is_train=True):
         """
@@ -29,8 +37,8 @@ class FGAN():
 
         with tf.variable_scope('generator', reuse=False if is_train == True else True):
             # Fully connected
-            fc1 = tf.layers.dense(z, 7 * 7 * 512)
-            fc1 = tf.reshape(fc1, (-1, 7, 7, 512))
+            fc1 = tf.layers.dense(z, 8 * 8 * 512)
+            fc1 = tf.reshape(fc1, (-1, 8, 8, 512))
             fc1 = tf.maximum(alpha * fc1, fc1)
 
             # Starting Conv Transpose Stack
@@ -46,13 +54,18 @@ class FGAN():
             batch_norm4 = tf.layers.batch_normalization(deconv4, training=is_train)
             lrelu4 = tf.maximum(alpha * batch_norm4, batch_norm4)
 
+            deconv5 = tf.layers.conv2d_transpose(lrelu4, 32, 3, 2, 'SAME')
+            batch_norm5 = tf.layers.batch_normalization(deconv5, training=is_train)
+            lrelu5 = tf.maximum(alpha * batch_norm5, batch_norm5)
+
             # Logits
-            logits = tf.layers.conv2d_transpose(lrelu4, out_channel_dim, 3, 2, 'SAME')
+            logits = tf.layers.conv2d_transpose(lrelu5, out_channel_dim, 3, 2, 'SAME')
 
             # Output
             out = tf.tanh(logits)
-            img =tf.reshape(out,[-1,self.img_height,self.img_width,1])
-            tf.summary.image('fake',img)
+            tf.summary.image('out', out, 20)
+            # img =tf.reshape(out,[-1,self.img_height,self.img_width,1])
+            # tf.summary.image('fake',img)
             return out
 
     def _build_discriminator(self,images,reuse=False):
@@ -64,30 +77,33 @@ class FGAN():
         """
         alpha = 0.2
 
-        with tf.variable_scope('discriminator',reuse=reuse):
+        with tf.variable_scope('discriminator', reuse=reuse):
             # using 4 layer network as in DCGAN Paper
 
             # Conv 1
-            conv1 = tf.layers.conv2d(images, 64, 5, 2, 'SAME')
+            conv1 = tf.layers.conv2d(images, 32, 5, 2, 'SAME')
             lrelu1 = tf.maximum(alpha * conv1, conv1)
 
             # Conv 2
-            conv2 = tf.layers.conv2d(lrelu1, 128, 5, 2, 'SAME')
+            conv2 = tf.layers.conv2d(lrelu1, 64, 5, 2, 'SAME')
             batch_norm2 = tf.layers.batch_normalization(conv2, training=True)
             lrelu2 = tf.maximum(alpha * batch_norm2, batch_norm2)
 
             # Conv 3
-            conv3 = tf.layers.conv2d(lrelu2, 256, 5, 1, 'SAME')
+            conv3 = tf.layers.conv2d(lrelu2, 128, 5, 1, 'SAME')
             batch_norm3 = tf.layers.batch_normalization(conv3, training=True)
             lrelu3 = tf.maximum(alpha * batch_norm3, batch_norm3)
 
             # Conv 4
-            conv4 = tf.layers.conv2d(lrelu3, 512, 5, 1, 'SAME')
+            conv4 = tf.layers.conv2d(lrelu3, 256, 5, 1, 'SAME')
             batch_norm4 = tf.layers.batch_normalization(conv4, training=True)
             lrelu4 = tf.maximum(alpha * batch_norm4, batch_norm4)
 
+            conv5 = tf.layers.conv2d(lrelu4, 512, 5, 1, 'SAME')
+            batch_norm5 = tf.layers.batch_normalization(conv5, training=True)
+            lrelu5 = tf.maximum(alpha * batch_norm5, batch_norm5)
             # Flatten
-            flat = tf.reshape(lrelu4, (-1, 7 * 7 * 512))
+            flat = tf.reshape(lrelu5, (-1, 8 * 8 * 512))
 
             # Logits
             logits = tf.layers.dense(flat, 1)
@@ -97,25 +113,7 @@ class FGAN():
 
             return out, logits
 
-    def model_inputs(self, image_width, image_height, image_channels, z_dim):
-        """
-        Create the model inputs
-        :param image_width: The input image width
-        :param image_height: The input image height
-        :param image_channels: The number of image channels
-        :param z_dim: The dimension of Z
-        :return: Tuple of (tensor of real input images, tensor of z data, learning rate)
-        """
-        inputs_real = tf.placeholder(tf.float32, shape=(None, image_width, image_height,image_channels),
-                                     name='input_real')
-        tf.summary.image('real',inputs_real)
-        inputs_z = tf.placeholder(tf.float32, (None, z_dim), name='input_z')
-
-        learning_rate = tf.placeholder(tf.float32, name='learning_rate')
-
-        return inputs_real, inputs_z, learning_rate
-
-    def model_loss(self,input_real, input_z, out_channel_dim):
+    def _build_loss(self,input_real, input_z, out_channel_dim):
         """
         Get the loss for the discriminator and generator
         :param input_real: Images from the real dataset
@@ -139,10 +137,11 @@ class FGAN():
         g_loss = tf.reduce_mean(
             tf.nn.sigmoid_cross_entropy_with_logits(logits=d_logits_fake,
                                                     labels=tf.ones_like(d_model_fake)))
-
+        tf.summary.scalar('d_loss',d_loss)
+        tf.summary.scalar('g_loss',g_loss)
         return d_loss, g_loss
 
-    def model_opt(self,d_loss, g_loss, learning_rate, beta1):
+    def _model_opt(self,d_loss, g_loss, learning_rate, beta1):
         """
         Get optimization operations
         :param d_loss: Discriminator loss Tensor
@@ -174,37 +173,29 @@ class FGAN():
         :param data_image_mode: The image mode to use for images ("RGB" or "L")
         """
         tf.reset_default_graph()
-        input_real, input_z, _ = self.model_inputs(self.img_height, self.img_width, 1, self.z_dim)
-        d_loss, g_loss = self.model_loss(input_real, input_z, 1)
-        d_opt, g_opt = self.model_opt(d_loss, g_loss, self.learning_rate, self.beta1)
-        MORPH = file_reader.FileReader('/home/bingzhang/Documents/Dataset/MORPH/MORPH/', 'MORPH_Info.mat')
+        d_loss, g_loss = self._build_loss(self.inputs_real, self.inputs_z, 1)
+        d_opt, g_opt = self._model_opt(d_loss, g_loss, self.learning_rate, self.beta1)
+        data_dir = '/scratch/BingZhang/GAN-face-generator/data'
+        celeba_dataset = helper.Dataset('celeba', glob(os.path.join(data_dir, 'img_align_celeba/*.jpg')))
         steps = 0
         summary_op = tf.summary.merge_all()
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            summary_writer = tf.summary.FileWriter('./logs/112358',sess.graph)
+            logdir = os.path.join('./log/', datetime.datetime.now().isoformat())
+            sumWriter = tf.summary.FileWriter(logdir, sess.graph)
             for epoch_i in range(self.epochs):
                 for j in range(600):
-                    batch_images,_ = MORPH.next_batch(self.batch_size)
-                    batch_images = np.asarray(batch_images)[:,:,:,np.newaxis]
-                    batch_images = batch_images * 2
-                    steps += 1
+                    for batch_images in celeba_dataset.get_batches(self.batch_size):
+                        batch_images = batch_images * 2
+                        steps += 1
 
-                    batch_z = np.random.uniform(-1, 1, size=(self.batch_size, self.z_dim))
+                        batch_z = np.random.uniform(-1, 1, size=(self.batch_size, self.z_dim))
 
-                    sum_,_ = sess.run([summary_op,d_opt], feed_dict={input_real: batch_images, input_z: batch_z})
-                    _ = sess.run(g_opt, feed_dict={input_z: batch_z})
-                    summary_writer.add_summary(sum_,epoch_i*600+j)
-                    if steps % 100 == 0:
-                        # At the end of every 10 epochs, get the losses and print them out
-                        train_loss_d = d_loss.eval({input_z: batch_z, input_real: batch_images})
-                        train_loss_g = g_loss.eval({input_z: batch_z})
-
-                        print("Epoch {}/{}...".format(epoch_i + 1, self.epochs),
-                              "Discriminator Loss: {:.4f}...".format(train_loss_d),
-                              "Generator Loss: {:.4f}".format(train_loss_g))
-
+                        summ, gloss, dloss, _ = sess.run([summary_op, g_loss, d_loss, d_opt],
+                                                         feed_dict={self.inputs_real: batch_images, self.inputs_z: batch_z})
+                        _ = sess.run(g_opt, feed_dict={self.inputs_z: batch_z})
+                        print 'epoch[%d] step[%d] gloss[%lf] dloss[%lf]' % (epoch_i, steps, gloss, dloss)
+                        sumWriter.add_summary(summ, steps)
 if __name__ == '__main__':
     fgan = FGAN()
-
     fgan.train()
