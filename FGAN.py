@@ -172,7 +172,6 @@ class FGAN():
         :param data_shape: Shape of the data
         :param data_image_mode: The image mode to use for images ("RGB" or "L")
         """
-        tf.reset_default_graph()
         data_dir = '/scratch/BingZhang/GAN-face-generator/data'
         celeba_dataset = helper.Dataset('celeba', glob(os.path.join(data_dir, 'img_align_celeba/*.jpg')))
         steps = 0
