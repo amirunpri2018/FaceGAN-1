@@ -23,7 +23,7 @@ class FGAN():
 
         self.learning_rate = tf.placeholder(tf.float32, name='learning_rate')
         self.d_loss, self.g_loss = self._build_loss(self.inputs_real,self.inputs_z,self.image_channels)
-
+        self.d_opt, self.g_opt = self._model_opt(self.d_loss, self.g_loss, self.learning_rate, self.beta1)
 
     def _build_generator(self,z, out_channel_dim, is_train=True):
         """
@@ -173,7 +173,6 @@ class FGAN():
         :param data_image_mode: The image mode to use for images ("RGB" or "L")
         """
         tf.reset_default_graph()
-        d_opt, g_opt = self._model_opt(self.d_loss, self.g_loss, self.learning_rate, self.beta1)
         data_dir = '/scratch/BingZhang/GAN-face-generator/data'
         celeba_dataset = helper.Dataset('celeba', glob(os.path.join(data_dir, 'img_align_celeba/*.jpg')))
         steps = 0
@@ -190,9 +189,9 @@ class FGAN():
 
                         batch_z = np.random.uniform(-1, 1, size=(self.batch_size, self.z_dim))
 
-                        summ, gloss, dloss, _ = sess.run([summary_op, self.g_loss, self.d_loss, d_opt],
+                        summ, gloss, dloss, _ = sess.run([summary_op, self.g_loss, self.d_loss, self.d_opt],
                                                          feed_dict={self.inputs_real: batch_images, self.inputs_z: batch_z})
-                        _ = sess.run(g_opt, feed_dict={self.inputs_z: batch_z})
+                        _ = sess.run(self.g_opt, feed_dict={self.inputs_z: batch_z})
                         print 'epoch[%d] step[%d] gloss[%lf] dloss[%lf]' % (epoch_i, steps, gloss, dloss)
                         sumWriter.add_summary(summ, steps)
 if __name__ == '__main__':
