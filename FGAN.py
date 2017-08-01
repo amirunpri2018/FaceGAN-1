@@ -16,13 +16,13 @@ class FGAN():
         self.z_dim = 100
         self.learning_rate = 0.0003
         self.beta1 = 0.5
-        self.inputs_real = tf.placeholder(tf.float32, shape=(None, self.image_width, self.image_height, self.image_channels),
+        self.input_real = tf.placeholder(tf.float32, shape=(None, self.image_width, self.image_height, self.image_channels),
                                      name='input_real')
-        tf.summary.image('real',self.inputs_real,20)
-        self.inputs_z = tf.placeholder(tf.float32, (None, self.z_dim), name='inputs_z')
+        tf.summary.image('real',self.input_real,20)
+        self.input_z = tf.placeholder(tf.float32, (None, self.z_dim), name='inputs_z')
 
         self.learning_rate = tf.placeholder(tf.float32, name='learning_rate')
-        self.d_loss, self.g_loss = self._build_loss(self.inputs_real,self.inputs_z,self.image_channels)
+        self.d_loss, self.g_loss = self._build_loss(self.input_real,self.input_z,self.image_channels)
         self.d_opt, self.g_opt = self._model_opt(self.d_loss, self.g_loss, self.learning_rate, self.beta1)
 
     def _build_generator(self,z, out_channel_dim, is_train=True):
@@ -190,8 +190,8 @@ class FGAN():
                         batch_z = np.random.uniform(-1, 1, size=(self.batch_size, self.z_dim))
 
                         summ, gloss, dloss, _ = sess.run([summary_op, self.g_loss, self.d_loss, self.d_opt],
-                                                         feed_dict={self.inputs_real: batch_images, self.inputs_z: batch_z})
-                        _ = sess.run(self.g_opt, feed_dict={self.inputs_z: batch_z})
+                                                         feed_dict={self.input_real: batch_images, self.input_z: batch_z})
+                        _ = sess.run(self.g_opt, feed_dict={self.input_z: batch_z})
                         print 'epoch[%d] step[%d] gloss[%lf] dloss[%lf]' % (epoch_i, steps, gloss, dloss)
                         sumWriter.add_summary(summ, steps)
 if __name__ == '__main__':
