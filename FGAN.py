@@ -21,7 +21,6 @@ class FGAN():
         tf.summary.image('real',self.input_real,20)
         self.input_z = tf.placeholder(tf.float32, (None, self.z_dim), name='inputs_z')
 
-        self.learning_rate = tf.placeholder(tf.float32, name='learning_rate')
         self.d_loss, self.g_loss = self._build_loss(self.input_real,self.input_z,self.image_channels)
         self.d_opt, self.g_opt = self._model_opt(self.d_loss, self.g_loss, self.learning_rate, self.beta1)
 
